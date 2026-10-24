@@ -1,0 +1,124 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  name         String
+  role         String // EMPLOYEE | HR | RISK | OPS | ADMIN
+  email        String?   @unique
+  passwordHash String?
+  employerId   String?
+  employeeId   String?   @unique
+  employer     Employer? @relation(fields: [employerId], references: [id])
+  employee     Employee? @relation(fields: [employeeId], references: [id])
+}
+
+model Employer {
+  id             String         @id @default(cuid())
+  name           String
+  sector         String
+  monthlyRevenue Int
+  facilityLimit  Int
+  feeRateBps     Int
+  status         String         @default("AKTIF")
+  users          User[]
+  employees      Employee[]
+  cycles         PayrollCycle[]
+  withdrawals    Withdrawal[]
+  invoices       Invoice[]
+}
+
+model Employee {
+  id          String       @id @default(cuid())
+  employerId  String
+  employer    Employer     @relation(fields: [employerId], references: [id])
+  nik         String       @unique
+  name        String
+  phone       String
+  baseSalary  Int
+  bankName    String
+  bankAccount String
+  kycStatus   String       @default("TERVERIFIKASI")
+  status      String       @default("AKTIF")
+  user        User?
+  withdrawals Withdrawal[]
+}
+
+model PayrollCycle {
+  id            String       @id @default(cuid())
+  employerId    String
+  employer      Employer     @relation(fields: [employerId], references: [id])
+  startDate     DateTime
+  endDate       DateTime
+  payday        DateTime
+  totalWorkdays Int
+  status        String       @default("AKTIF") // AKTIF | DITUTUP
+  withdrawals   Withdrawal[]
+  invoices      Invoice[]
+}
+
+model Withdrawal {
+  id            String        @id @default(cuid())
+  employeeId    String
+  employee      Employee      @relation(fields: [employeeId], references: [id])
+  employerId    String
+  employer      Employer      @relation(fields: [employerId], references: [id])
+  cycleId       String
+  cycle         PayrollCycle  @relation(fields: [cycleId], references: [id])
+  amount        Int
+  platformFee   Int
+  transferFee   Int
+  received      Int
+  status        String
+  rejectReason  String?
+  invoiceId     String?
+  invoice       Invoice?      @relation(fields: [invoiceId], references: [id])
+  createdAt     DateTime      @default(now())
+  hrDecidedAt   DateTime?
+  riskDecidedAt DateTime?
+  disbursedAt   DateTime?
+  disbursement  Disbursement?
+}
+
+model Disbursement {
+  id           String     @id @default(cuid())
+  withdrawalId String     @unique
+  withdrawal   Withdrawal @relation(fields: [withdrawalId], references: [id])
+  status       String     @default("PENDING") // PENDING | SUCCESS | FAILED
+  attempts     Int        @default(0)
+  ref          String?
+  lastError    String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model Invoice {
+  id          String       @id @default(cuid())
+  employerId  String
+  employer    Employer     @relation(fields: [employerId], references: [id])
+  cycleId     String
+  cycle       PayrollCycle @relation(fields: [cycleId], references: [id])
+  total       Int
+  dueDate     DateTime
+  status      String       @default("BELUM_DIBAYAR") // BELUM_DIBAYAR | DIBAYAR
+  paidAt      DateTime?
+  createdAt   DateTime     @default(now())
+  withdrawals Withdrawal[]
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorName String
+  actorRole String
+  action    String
+  entity    String
+  entityId  String
+  detail    String?
+  createdAt DateTime @default(now())
+}

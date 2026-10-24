@@ -1,0 +1,92 @@
+# Produksi di server sendiri (di belakang nginx + Cloudflare).
+# Semua port di-bind ke 127.0.0.1 — hanya nginx yang menghadap internet.
+# Port host bisa digeser lewat .env (API_PORT dst.) jika bentrok dengan aplikasi lain.
+#
+# Jalankan: docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+
+name: gajikini
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ewa
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD di .env.prod}
+      POSTGRES_DB: ewa
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ewa -d ewa"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://ewa:${DB_PASSWORD}@db:5432/ewa
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      PORT: "4000"
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET di .env.prod}
+    ports:
+      - "127.0.0.1:${API_PORT:-4100}:4000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: https://api-gajikini.deluwang.online
+        NEXT_PUBLIC_HR_URL: https://hr-gajikini.deluwang.online
+        NEXT_PUBLIC_OPS_URL: https://ops-gajikini.deluwang.online
+    ports:
+      - "127.0.0.1:${WEB_PORT:-3120}:3000"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  hr:
+    build:
+      context: .
+      dockerfile: apps/hr/Dockerfile
+    environment:
+      INTERNAL_API_URL: http://api:4000
+    ports:
+      - "127.0.0.1:${HR_PORT:-3122}:3000"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  internal:
+    build:
+      context: .
+      dockerfile: apps/internal/Dockerfile
+    environment:
+      INTERNAL_API_URL: http://api:4000
+    ports:
+      - "127.0.0.1:${OPS_PORT:-3121}:3000"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pgdata:

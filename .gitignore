@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.next/
+.env
+*.log
+.DS_Store
+apps/web/lib/generated/
+.vercel
+.env*
